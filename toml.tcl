@@ -1,13 +1,14 @@
-set key ""
-set value ""
-
 proc create_pair {} {
-  puts "$::key = $::value"
+  puts ">>$::key = $::value<<"
   set ::key ""
   set ::value ""
 
   return wait_newline
 }
+
+# TODO
+# quoted string as key
+# unicode symbols
 
 proc is_whitespace {c}  {
   return [expr {"$c"} == {" "} || {"$c"} == {"\t"}]
@@ -17,11 +18,16 @@ proc is_digit {c} {
   return [regexp {^\d$} $c]
 }
 
-proc bare_key_check {c} {
-  return [expr ( {"$c"} >= {"A"} && {"$c"} <= {"Z"} ) ||\
-               ( {"$c"} >= {"a"} && {"$c"} <= {"z"} ) ||\
-               ( {"$c"} >= {"0"} && {"$c"} <= {"9"} ) ||\
-               {"$c"} == {"_"} || {"$c"} == {"-"}]
+proc is_alpha {c} {
+  return [regexp {^[a-zA-Z]$} $c]
+}
+
+proc is_alphanum {c} {
+  return [regexp {^[a-zA-Z0-9]$} $c]
+}
+
+proc is_barekey {c} {
+  return [regexp {^[a-zA-Z0-9_-]$} $c]
 }
 
 proc wait_newline {c} {
@@ -38,37 +44,68 @@ proc wait_newline {c} {
 proc first_parser {c} {
   if {$c == "\n" || [is_whitespace $c]} {
     return first_parser
-  }
-  if {$c == {#}} {
+  } elseif {$c == {#}} {
     return comment_parser
-  }
-  if {[bare_key_check $c]} {
+  } elseif {$c == {"}} {
+    return [quoted_key_parser $c]
+  } elseif {[is_barekey $c]} {
     return [bare_key_parser $c]
   }
-  return first_parser
+  throw DECODE_ERROR "Bad key start symbol :$c"
+}
+
+proc quoted_key_parser {c} {
+  if {$c == {"}} {
+    if {$::key ne ""} {
+      set ::key [string range $::key 1 end]
+      return key_parser_wait_eq
+    }
+  } elseif {$c == "\\"} {
+    return escaped_symbol_in_key_parser
+  } elseif {$c == "\n"} {
+    throw DECODE_ERROR "The key cannot be multi-line "
+  }
+  append ::key $c
+  return quoted_key_parser
+}
+
+proc escaped_symbol_in_key_parser {c} {
+  if {$c == "\n" || [is_whitespace $c]} {
+    throw DECODE_ERROR "Expected \"=\" or whitespace after key, but passed $c"
+  }
+}
+
+proc escaped_symbol_in_key_parser {c} {
+  if {$c in {b t n f r \" \\}} {
+    set ::key "${::key}[join "\\$c" ""]"
+    return quoted_key_parser
+  } elseif {$c == "u"} {
+    return unicode_parser
+  }
+  throw DECODE_ERROR "Bad escape sequence: \\$c"
 }
 
 proc bare_key_parser {c} {
-  if {($c >= {A} && $c <= {Z}) || ($c >= {a} && $c <= {z}) || $c == {_} || $c == {-}} {
+  if {[is_barekey $c]} {
     append ::key $c
   } else {
-    return [bare_key_parser_wait_eq $c]
+    return [key_parser_wait_eq $c]
   }
   return bare_key_parser
 }
 
-proc bare_key_parser_wait_eq {c} {
+proc key_parser_wait_eq {c} {
   if {$c == {=}} {
     return value_parser_wait_start
   } elseif {![is_whitespace $c]} {
     throw DECODE_ERROR "Expected \"=\" or whitespace after key, but passed $c"
   }
-  return bare_key_parser_wait_eq
+  return key_parser_wait_eq
 }
 
-proc string_parser {c} {
+proc value_string_parser {c} {
   if {$c == "\\"} {
-    return escaped_symbol_parser
+    return escaped_symbol_in_value_parser
   } elseif {$c == "\""} {
     if {$::value ne ""} {
       if {$::value ne {"} && $::value ne {""}} {
@@ -85,12 +122,39 @@ proc string_parser {c} {
     }
   }
   set ::value "${::value}$c"
-  return string_parser
+  return value_string_parser
 }
 
-proc escaped_symbol_parser {c} {
-  if {$c in "btnfr\"\\"} {
+proc escaped_symbol_in_value_parser {c} {
+  if {$c == "\n" || [is_whitespace $c]} {
+    if {[string range $::value 0 2] ne {"""}} {
+      throw DECODE_ERROR "Line ending backslash allowed only in multistring value"
+    }
+    return line_ending_backslash_parser
+  }
+  return [escaped_symbol_in_value_parser_now_whitespace $c]
+}
+
+proc line_ending_backslash_parser {c} {
+  if {[is_whitespace $c]} {
+    return line_ending_backslash_parser
+  } elseif {$c == "\n"} {
+    return line_ending_backslash_parser_2_step
+  }
+  throw DECODE_ERROR "After \"\\ \" must be only whitespace or newline"
+}
+
+proc line_ending_backslash_parser_2_step {c} {
+  if {$c == "\n" || [is_whitespace $c]} {
+    return line_ending_backslash_parser_2_step
+  }
+  return [value_string_parser $c]
+}
+
+proc escaped_symbol_in_value_parser_now_whitespace {c} {
+  if {$c in {b t n f r \" \\}} {
     set ::value "${::value}[join "\\$c" ""]"
+    return value_string_parser
   } elseif {$c == "u"} {
     return unicode_parser
   }
@@ -98,7 +162,7 @@ proc escaped_symbol_parser {c} {
 }
 
 proc value_parser_wait_start {c} {
-  if {[is_whitespace $c]} {
+  if {[is_whitespace $c] || $c == "\n"} {
     return value_parser_wait_start
   }
   return [value_parser_ident $c]
@@ -109,8 +173,8 @@ proc value_parser_ident {c} {
     return [number_parser $c]
   } elseif {$c == {t} || $c == {f}} {
     return [boolean_parser $c]
-  } elseif {$c == {"}} {
-    return [string_parser $c]
+  } elseif {$c == "\""} {
+    return [value_string_parser $c]
   } elseif {$c == {[}} {
     return [array_parser $c]
   } elseif {$c == "\{"} {
@@ -127,9 +191,15 @@ proc comment_parser {c} {
 }
 
 proc decode {raw} {
+  set ::key ""
+  set ::value ""
+
   set parser first_parser
   foreach c [split $raw ""] {
     set parser [$parser $c]
     # puts "$parser $c"
+  }
+  if {$::key ne "" || $::value ne ""} {
+    throw DECODE_ERROR "Not finished record"
   }
 }
