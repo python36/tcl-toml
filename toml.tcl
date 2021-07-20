@@ -7,8 +7,13 @@ proc create_pair {} {
 }
 
 # TODO
-# quoted string as key
-# unicode symbols
+# single quotes
+# utf-32
+# integer
+# float
+# boolean
+
+source unicode.tcl
 
 proc is_whitespace {c}  {
   return [expr {"$c"} == {" "} || {"$c"} == {"\t"}]
@@ -80,9 +85,17 @@ proc escaped_symbol_in_key_parser {c} {
     set ::key "${::key}[join "\\$c" ""]"
     return quoted_key_parser
   } elseif {$c == "u"} {
-    return unicode_parser
+    return unicode_key_parser
   }
   throw DECODE_ERROR "Bad escape sequence: \\$c"
+}
+
+proc unicode_key_parser {c} {
+  if {[Unicode::update $c]} {
+    append ::key $Unicode::value
+    return quoted_key_parser
+  }
+  return unicode_key_parser
 }
 
 proc bare_key_parser {c} {
@@ -159,6 +172,14 @@ proc escaped_symbol_in_value_parser_now_whitespace {c} {
     return unicode_parser
   }
   throw DECODE_ERROR "Bad escape sequence: \\$c"
+}
+
+proc unicode_parser {c} {
+  if {[Unicode::update $c]} {
+    append ::value $Unicode::value
+    return value_string_parser
+  }
+  return unicode_parser
 }
 
 proc value_parser_wait_start {c} {

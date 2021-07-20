@@ -48,8 +48,8 @@ check_ok {\
   r = "ab\rc"
   quote = "ab\"c"
   backslash = "ab\\c"
-  #u16 = "\u0041"
-  #u32 = "\u00000041"}
+  u16 = "\u0041"
+  u32 = "\u00000041"}
 check_ok {m = """hello
  wor\ 
 
@@ -59,7 +59,8 @@ check_error {m = """hello
 check_ok {
   "$456" = "d"
   "$%^ 1234 kjhsd" = "d"
-  "#c\fa" = "b"}
+  "#c\fa" = "b"
+  "b\u0041c" = "bac"}
 check_error {"jsh
   kjjas" = "n"}
 
