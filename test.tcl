@@ -14,8 +14,8 @@ proc puts_error {} {
 }
 
 proc check_error {t} {
-  if {[catch {decode $t}]} {
-    puts "[puts_ok] ERROR: $t"
+  if {[catch {decode $t} e]} {
+    puts "[puts_ok] ERROR $e"
   } else {
     puts "[puts_error] ERROR: $t"
   }
@@ -33,37 +33,95 @@ check_ok {\
   # This is a full-line comment
   key = "value"  # This is a comment at the end of a line
   another = "# This is not a comment"}
-check_error {key = # INVALID}
-check_error {first = "Tom" last = "Preston-Werner" # INVALID}
+# check_error {key = # INVALID}
+# check_error {first = "Tom" last = "Preston-Werner" # INVALID}
+check_ok {empty = ""}
 check_ok {\
-  key = "value"
-  bare_key = "value"
-  bare-key = "value"
+  key ="value"
+  bare_key= "value"
+  bare-key="value"
   1234 = "value"}
-check_ok {\
-  b = "ab\bc"
-  t = "ab\tc"
-  n = "ab\nc"
-  f = "ab\fc"
-  r = "ab\rc"
-  quote = "ab\"c"
-  backslash = "ab\\c"
-  u16 = "\u0041"
-  u32 = "\u00000041"}
-check_ok {m = """hello
- wor\ 
+check_error {k$y = "value"}
+# check_ok {\
+#   b = "ab\bc"
+#   t = "ab\tc"
+#   n = "ab\nc"
+#   f = "ab\fc"
+#   r = "ab\rc"
+#   quote = "ab\"c"
+#   backslash = "ab\\c"
+#   u16 = "\u0041"
+#   u32 = "\u00000041"}
+check_ok {m = """hel"lo
+ wor""
 
- ld"""}
-check_error {m = """hello
- wor\ ld"""}
+ ld"""
+m2 = """111"""}
+# # check_error {m = """hello
+#  wor\ ld"""}
+# check_ok {
+#   "$456" = "d"
+#   "$%^ 1234 kjhsd" = "d"
+#   "#c\fa" = "b"
+#   "b\u0041c" = "bac"}
+# check_error {"jsh
+#   kjjas" = "n"}
+# check_error {ue = "\u00 41"}
 check_ok {
-  "$456" = "d"
-  "$%^ 1234 kjhsd" = "d"
-  "#c\fa" = "b"
-  "b\u0041c" = "bac"}
-check_error {"jsh
-  kjjas" = "n"}
+  t = true
+  f = false}
+check_error {t = tr}
+check_error {f = false0}
+check_ok {b = 0b11
+  bb = 0b111_000
+  bbb = 0b111_00_1_0
+  o = 0o17
+  oo = 0o177_012
+  h = 0x0123
+  hh = 0x0012_34_56}
+check_error {u = 0u99}
+check_error {b = 0b12}
+check_error {bb = 0b_111_000}
+check_error {o = 0o18}
+check_error {oo = 0_o177_012}
+check_error {h = +0x0123}
+check_error {hh = -0x12_34_56}
+check_error {e = 0x}
+check_ok {z = 0
+  o = 1
+  p = +3_8
+  n = -18}
+check_error {zz = 00}
+check_error {u = +3_}
+check_error {u = -_0}
+check_error {u = 0_1}
+check_ok {
+  # fractional
+  flt1 = +1.0
+  flt2 = 3.1415
+  flt3 = -0.01
+  # exponent
+  flt4 = 5e+22
+  flt5 = 1e06
+  flt6 = -2E-2
+  # both
+  flt7 = 6.626e-34
+  flt_8 = 6_6.3_6
+  flt_9 = 6_6.3_6e1_2}
+check_error {fzz = 00.4}
+check_error {invalid_float_1 = .7}
+check_error {invalid_float_2 = 7.}
+check_error {invalid_float_3 = 3.e+20}
+check_error {invalid_float_3 = 3e+2__0}
+check_error {invalid_float_3 = 3e+_2_0}
+check_error {invalid_float_3 = 3e_2_0}
+check_ok {
+  # infinity
+  sf1 = inf  # positive infinity
+  sf2 = +inf # positive infinity
+  sf3 = -inf # negative infinity
 
-# if {[catch {[decode {key = # INVALID}]}]} {puts "\e[1;31m ERROR parses: OK \e[0m"}
-# # set d 
-# # set d [decode {first = "Tom" last = "Preston-Werner" # INVALID}]
+  # not a number
+  sf4 = nan  # actual sNaN/qNaN encoding is implementation-specific
+  sf5 = +nan # same as `nan`
+  sf6 = -nan # valid, actual encoding is implementation-specific}
