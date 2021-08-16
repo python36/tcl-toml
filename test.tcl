@@ -32,9 +32,10 @@ proc check_ok {t} {
 check_ok {\
   # This is a full-line comment
   key = "value"  # This is a comment at the end of a line
-  another = "# This is not a comment"}
-# check_error {key = # INVALID}
-# check_error {first = "Tom" last = "Preston-Werner" # INVALID}
+  another = "# This is not a comment"
+  s = "hello\"world"}
+check_error {key = # INVALID}
+check_error {first = "Tom" last = "Preston-Werner" # INVALID}
 check_ok {empty = ""}
 check_ok {\
   key ="value"
@@ -59,11 +60,14 @@ check_ok {m = """hel"lo
 m2 = """111"""}
 # # check_error {m = """hello
 #  wor\ ld"""}
-# check_ok {
-#   "$456" = "d"
-#   "$%^ 1234 kjhsd" = "d"
-#   "#c\fa" = "b"
-#   "b\u0041c" = "bac"}
+check_ok {
+  "$456" = "d"
+  "$%^ 1234 kjhsd" = "d"
+  "#c\fa" = "b"
+  "b\u0041c" = "bac"}
+check_ok {
+  '#c\fa' = "b"
+  'b\u0041c' = "bac"}
 # check_error {"jsh
 #   kjjas" = "n"}
 # check_error {ue = "\u00 41"}
@@ -125,3 +129,86 @@ check_ok {
   sf4 = nan  # actual sNaN/qNaN encoding is implementation-specific
   sf5 = +nan # same as `nan`
   sf6 = -nan # valid, actual encoding is implementation-specific}
+check_ok {str71 = """"This," she said, "is just a pointless statement.""" #d"""}
+check_ok {str72 = """"This," she said, "is just a pointless statement."""#d"""}
+check_ok {str73 = """"This," she said, "is just a pointless statement."""}
+check_ok {str7 = """"This," she said, "is just a pointless statement.\"""""
+  #d"""}
+check_ok {str74 = """"This," she said, "is just a pointless statement.\""""""}
+check_error {str75 = """"This," she said, "is just a pointless statement.""""""}
+check_ok {
+  str8 = """"""
+  str9 = """"""""""}
+check_error {str91 = """""""""""}
+check_ok {
+  k1 = 7
+  [t1]
+  k1 = 8
+  [ a . b ]
+  k2 = 9
+}
+check_error {[tr
+  ]}
+check_ok {a.b = 3
+  a. b = 5
+  a .b = 6
+  a . b = 6}
+check_error {a..b = 3}
+check_error {a. = 3}
+check_error {.a = 3}
+check_ok {a."*b".7 = 3}
+check_error {a.b = 3
+  [a]
+  c = 4}
+check_error {
+  [a]
+  b = 3
+  [a]
+  c = 4}
+check_ok {
+  [a.b]
+  b = 3
+  [a.r]
+  c = 4}
+check_error {
+  [a.b]
+  b = 3
+  [a]
+  b = 4}
+check_ok {
+  [a."b.c".d]
+  b = 3
+  [a."b.c.d"]
+  b = 4}
+check_error {
+  [a".b"]
+  b = 3}
+check_error {
+  [a."b]
+  b = 3}
+check_error {
+  [a.b"]
+  b = 3}
+
+check_ok {
+  [ a . b . c ]
+  b.v = 3}
+check_error {
+  a.b = 3
+  a.b.c = 4
+}
+check_ok {
+  a.b.c.g.h = 3
+  a.b.f = 4
+}
+check_ok {
+  [[   at   ]]
+  a = 1
+  [[at]]
+  a = 2
+}
+check_error {[[      ]]}
+check_error {[   ]}
+check_error {[]}
+check_error {[[]]}
+
