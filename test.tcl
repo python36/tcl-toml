@@ -149,10 +149,12 @@ check_ok {
 }
 check_error {[tr
   ]}
+check_error {a.b = 3
+  a. b = 5}
 check_ok {a.b = 3
-  a. b = 5
-  a .b = 6
-  a . b = 6}
+  a. c = 5
+  a .d = 6
+  a . e = 6}
 check_error {a..b = 3}
 check_error {a. = 3}
 check_error {.a = 3}
@@ -211,4 +213,83 @@ check_error {[[      ]]}
 check_error {[   ]}
 check_error {[]}
 check_error {[[]]}
+check_ok {
+  [[a.b.c]]
+  a = 1
+  [[at]]
+  a = 2
+}
+check_ok {
+  [[a.b.c]]
+  a = 1
+  b = 3
+  [[a.b.c]]
+  a = 2
+}
+check_ok {
+  [[a.b]]
+  a = 1
+  cc = 3
+  [[a.b.c]]
+  a = 2
+}
+check_ok {[[fruits]]
+name = "apple"
 
+[fruits.physical]  # subtable
+color = "red"
+shape = "round"
+
+[[fruits.varieties]]  # nested array of tables
+name = "red delicious"
+
+[[fruits.varieties]]
+name = "granny smith"
+
+
+[[fruits]]
+name = "banana"
+
+[[fruits.varieties]]
+name = "plantain"}
+
+check_ok {[[products]]
+name = "Hammer"
+sku = 738594937
+
+[[products]]  # empty table within the array
+
+[[products]]
+name = "Nail"
+sku = 284758393
+
+color = "gray"}
+
+check_error {[fruit.physical]  # subtable, but to which parent element should it belong?
+color = "red"
+shape = "round"
+
+[[fruit]]  # parser must throw an error upon discovering that "fruit" is
+           # an array rather than a table
+name = "apple"}
+
+check_error {[[fruits]]
+name = "apple"
+
+[[fruits.varieties]]
+name = "red delicious"
+
+# INVALID: This table conflicts with the previous array of tables
+[fruits.varieties]
+name = "granny smith"}
+
+check_error {[[fruits]]
+name = "apple"
+
+[fruits.physical]
+color = "red"
+shape = "round"
+
+# INVALID: This array of tables conflicts with the previous table
+[[fruits.physical]]
+color = "green"}

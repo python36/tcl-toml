@@ -3,7 +3,6 @@
 ''' Multiline
 \x escape sequence
 array
-table
-array of tables
+repr array of tables
 date
 inline table

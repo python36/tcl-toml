@@ -82,38 +82,45 @@ proc get_level {path l} {
   return [get_level [string range $path [string length $r] end] $l]
 }
 
-proc create_parent {tree} {
+proc create_parent {tree elem d} {
+  # set d [huddle create]
   set path $tree
 
   set new_path [list]
-  set d [huddle create]
 
   set key [lindex $path end]
   set path [lrange $path 0 end-1]
   while {$path != {}} {
-    if {[huddle exists $::dictionary {*}$path]} {
-      set new_d [huddle get $::dictionary {*}$path]
-      huddle append new_d $key $d
-      huddle set ::dictionary {*}$path $new_d
-      return
+    if {[exists $d $path]} {
+      set new_d [huddle get $d {*}[get_path $d $path]]
+      huddle append new_d $key $elem
+      huddle set d {*}[get_path $d $path] $new_d
+      return $d
     }
 
-    set d [huddle create $key $d]
+    set elem [huddle create $key $elem]
     set key [lindex $path end]
     set path [lrange $path 0 end-1]
 
     lappend new_path $key
   }
-  huddle append ::dictionary $key $d
+  huddle append d $key $elem
 
-  return
+  return $d
 }
 
 proc repr {d s} {
   set str ""
   foreach key [huddle keys $d] {
     if {[huddle type $d $key] == {dict}} {
-      set str "$str$s$key:\n[repr [huddle get $d $key] "$s  "]"
+      set str "$str$s$key: \{\n[repr [huddle get $d $key] "$s  "]$s\}\n"
+    } elseif {[huddle type $d $key] == {list}} {
+      set l [huddle get $d $key]
+      set str "$str$s$key: \[\n"
+      for {set i 0} {$i < [huddle llength $l]} {incr i} {
+        set str "$str[repr [huddle get $d $key $i] "$s  "],"
+      }
+      set str "$str$s\]\n"
     } else {
       set str "$str$s$key: [huddle get_stripped $d $key]\n"
     }
@@ -129,6 +136,33 @@ proc create_list {table} {
   }
 }
 
+proc exists {d p} {
+  set path [list]
+  foreach i $p {
+    puts "%%%$path [huddle exists $d a b] $d"
+    if {![huddle exists $d $i]} {
+      return false
+    }
+    set d [huddle get $d $i]
+    if {[huddle type $d] == {list}} {
+      lappend path end
+      set d [huddle get $d end]
+    }
+  }
+  return true
+}
+
+proc get_path {d p} {
+  set path [list]
+  foreach i $p {
+    lappend path $i
+    if {[huddle type $d {*}$path] == {list}} {
+      lappend path end
+    }
+  }
+  return $path
+}
+
 proc decode {raw} {
   set ::history ""
   set parents {}
@@ -137,26 +171,42 @@ proc decode {raw} {
 
   pop first_clear
   set ::history ""
+  set is_table false
 
   while {$::raw ne ""} {
     if {[set table [remove_blank_in_key [pop table]]] ne ""} {
       puts "Table: $table"
 
       set parents [get_level $table [list]]
-      if {[huddle exists $::dictionary {*}$parents]} {
+      if {[exists $::dictionary $parents]} {
         err OVERWRITE_ERROR {Already defined}
       }
-      create_parent $parents
+      set ::dictionary [create_parent $parents [huddle create] $::dictionary]
+      set is_table false
     } elseif {[set array_of_table [remove_blank_in_key [pop array_of_table]]] ne ""} {
       puts "Array of table: $array_of_table"
 
       set parents [get_level $array_of_table [list]]
-      if {[huddle exists $::dictionary {*}$parents]} {
-        if {[huddle type $::dictionary {*}$parents] != {list}} {
+      puts "ARR[exists $::dictionary $parents]"
+
+      puts "^^^$parents, $::dictionary"
+      if {[exists $::dictionary $parents]} {
+        puts ")))_+++++++++++++++++++++[get_path $::dictionary $parents]"
+        if {[huddle type $::dictionary {*}[lrange [get_path $::dictionary $parents] 0 end-1]] != {list}} {
           err INSERT_ERROR {Inserting into a non-list}
         }
+        set arr [huddle get $::dictionary {*}[lrange [get_path $::dictionary $parents] 0 end-1]]
+        puts "???$arr"
+        huddle append arr [huddle create]
+        huddle set ::dictionary {*}[lrange [get_path $::dictionary $parents] 0 end-1] $arr
+      } else {
+        puts "!!!$::dictionary==$parents"
+        set ::dictionary [create_parent $parents [huddle list [huddle create]] $::dictionary]
+        puts "!!!$::dictionary"
       }
-      create_list $parents
+
+      puts "***$::dictionary"
+      set is_table true
 
     } else {
       if {[set raw_key [remove_blank_in_key [pop key]]] eq ""} {
@@ -164,29 +214,58 @@ proc decode {raw} {
       puts "Key: $raw_key"
       set keys [get_level $raw_key [list]]
       set key [lindex $keys end]
-      set path [concat $parents [lrange $keys 0 end-1]]
 
       if {[set equal [pop equal]] eq ""} {
         err PARSE_ERROR "Undefined = or bad key"}
 
-      if {[huddle exists $::dictionary {*}$path $key]} {
+      set value [find_value]
+      puts "Value: $value"
+
+
+      if {$is_table == true} {
+        puts "###[get_path $::dictionary $parents]"
+        set cur_d [huddle get $::dictionary {*}[get_path $::dictionary $parents]]
+        puts "&&&$cur_d"
+        set path [lrange $keys 0 end-1]
+      } else {
+        set cur_d $::dictionary
+        set path [concat $parents [lrange $keys 0 end-1]]
+      }
+
+      # puts $cur_d
+      # puts "++[huddle exists $cur_d {*}$path $key]"
+
+      if {[exists $cur_d [concat $path $key]]} {
         err OVERWRITE_ERROR {Already defined}
       }
 
-      set value [find_value]
-      puts "Value: $value"
+      puts "---$path"
       if {$path == {}} {
-        huddle append ::dictionary $key [huddle string $value]
+        huddle append cur_d $key [huddle string $value]
       } else {
-        if {![huddle exists $::dictionary {*}$path]} {
-          create_parent $path
-        } elseif {[huddle type $::dictionary {*}$path] != {dict}} {
+        if {![exists $cur_d $path]} {
+          set cur_d [create_parent $path [huddle create] $cur_d]
+          puts "-/-$cur_d $path"
+        } elseif {[huddle type $cur_d {*}[get_path $cur_d $path]] != {dict}} {
           err INSERT_ERROR {Inserting into a non-dict}
         }
-        set parent_dict [huddle get $::dictionary {*}$path]
+        puts "-+=$cur_d"
+        set parent_dict [huddle get $cur_d {*}[get_path $cur_d $path]]
         huddle append parent_dict $key [huddle string $value]
-        huddle set ::dictionary {*}$path $parent_dict
+        huddle set cur_d {*}[get_path $cur_d $path] $parent_dict
       }
+
+
+
+      if {$is_table == true} {
+        huddle set ::dictionary {*}[get_path $::dictionary $parents] $cur_d
+      } else {
+        set ::dictionary $cur_d
+      }
+
+
+
+
     }
     if {[set clear [pop clear]] eq "" && $::raw ne ""} {
       err PARSE_ERROR "Undefined newline"}
