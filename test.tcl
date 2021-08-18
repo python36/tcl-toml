@@ -293,3 +293,36 @@ shape = "round"
 # INVALID: This array of tables conflicts with the previous table
 [[fruits.physical]]
 color = "green"}
+
+check_ok {
+  integers = [ 1, 2, 3 ]
+  colors = [ "red", "yellow", "green" ]
+  nested_arrays_of_ints = [ [ 1, 2 ], [3, 4, 5] ]
+  nested_mixed_array = [ [ 1, 2 ], ["a", "b", "c"] ]
+}
+
+check_ok {
+  integers2 = [
+    1, 2, 3
+  ]
+
+  integers3 = [
+    1,
+    2, # this is ok
+  ]
+
+  integers4 = [
+  # first comment
+
+  7,
+
+  [5,#second comment
+    6]
+  ,3]
+  array_empty = []
+}
+check_error {
+  integers2 = [
+    1, 2, 3,,
+  ]
+}
