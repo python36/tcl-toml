@@ -1,7 +1,4 @@
-"" Key
 '' Key
 ''' Multiline
 \x escape sequence
-repr array of tables
-date
 inline table

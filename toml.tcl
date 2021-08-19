@@ -1,5 +1,49 @@
 package require huddle
 
+# https://wiki.tcl-lang.org/page/Time+and+date+validator
+proc timevalidate {format str} {
+  # Start with a simple check: If the string cannot be parsed against
+  # the specified format at all it's definitely wrong
+  if {[catch {clock scan $str -format $format} time]} {return 0}
+
+  # Create a table for translating the supported clock format specifiers
+  # to scan format specifications
+  set map {%a %3s %A %s %b %3s %B %s %d %2d %D %2d/%2d/%4d
+    %e %2d %g %2d %G %4d %h %s %H %2d %I %2d %j %3d
+    %J %d %k %2d %l %2d %m %2d %M %2d %N %2d %p %2s
+    %P %2s %s %d %S %2d %t \t %T %2d:%2d:%2d %u %1d
+    %V %2d %w %1d %W %2d %y %2d %Y %4d %z %4d %Z %s
+  }
+
+  # Build the scan format string out of the clock format string
+  set scanfmt [string map $map $format]
+
+  # Recreate the time string from the seconds value
+  set tmp [clock format $time -format $format]
+
+  # Scan both versions of the string representation
+  set list1 [scan $str $scanfmt]
+  set list2 [scan $tmp $scanfmt]
+
+  # Compare all elements as numbers and strings
+  foreach n1 $list1 n2 $list2 {
+    if {$n1 != $n2 && ![string equal -nocase $n1 $n2]} {return 0}
+  }
+
+  # Declare the time string valid since all elements matched
+  return 1
+}
+proc validate_date {s} {
+  if {![timevalidate %Y-%m-%d $s]} {
+    err BAD_DATE "Date not valid"
+  }
+}
+proc validate_time {s} {
+  if {![timevalidate %T [string range $s 0 7]]} {
+    err BAD_TIME "Time not valid"
+  }
+}
+
 set first_clear {^(\s*(\#[^\n]*)*)*}
 set clear {^(([[:blank:]]*(\#[^\n]*)*(\n|$)[[:blank:]]*)+|$)}
 set key_level {([A-Za-z0-9_-]+|\"([^\n\"]|\\\")*\"|\'([^\n\"]|\\\")*\')}
@@ -22,6 +66,13 @@ set float {^((\+|\-)?((0|[1-9](\_?[0-9]+)*)((\.[0-9](\_?[0-9]+)*)|(\.[0-9](\_?[0
 set start_array {^(\[)\s*}
 set finish_array {^(\])}
 set separate_array {^(,)}
+set date {(\d{4}-\d{2}-\d{2})}
+set time {(\d{2}:\d{2}:\d{2})(?:\.(\d+))?}
+set offset [concat $date {[T|\ ]} $time {(Z|(\-|\+)\d\d:\d\d)}]
+set local_date [concat ^ $date]
+set local_time [concat ^ $time]
+set local_datetime [concat {^(} $date {[T|\ ]} $time {)}]
+set offset_datetime [concat {^(} $offset {)}]
 
 proc remove_underscore {s} {
   return [regsub -all {\_} $s {}]
@@ -30,7 +81,7 @@ proc remove_blank_in_key {s} {
   return [regsub -all {[[:blank:]]*\.[[:blank:]]*} $s {.}]
 }
 
-proc to_str_multiline {s} {
+proc handle_str_multiline {s} {
   if {[regexp {([^\\]\"{6,}|\\\"{7,}|\"{10,})$} $s]} {
     err PARSE_ERROR "Sequences of three or more quotes are not permitted"
   }
@@ -68,6 +119,28 @@ proc handle_start_array {s} {
   }
   return $arr
 }
+proc handle_local_date {s} {
+  validate_date $s
+  return [huddle string $s]}
+proc handle_local_time {s} {
+  validate_time $s
+  return [huddle string $s]}
+proc handle_local_datetime {s} {
+  set d [string range $s 0 9]
+  set t [string range $s 11 18]
+  validate_date $d
+  validate_time $t
+  return [huddle string "${d}T[string range $s 11 end]"]}
+proc handle_offset_datetime {s} {
+  regexp -expanded $::offset $s a d t f o
+  validate_date $d
+  validate_time $t
+  if {$o ne {Z}} {
+    if {![timevalidate {%H:%M} [string range $o 1 end]]} {
+      err BAD_OFFSET "Offset not valid"
+    }
+  }
+  return [huddle string "${d}T[string range $s 11 end]"]}
 
 proc pop {t} {
   set exp [set ::$t]
@@ -85,7 +158,8 @@ proc err {status reason} {
 }
 
 proc find_value {} {
-  foreach t {str_multiline_only_quotes str_multiline str boolean bin oct hex nan float dec start_array} {
+  foreach t {str_multiline_only_quotes str_multiline str boolean \
+      offset_datetime local_datetime local_date local_time bin oct hex nan float dec start_array} {
     if {[set value [pop $t]] ne ""} {
       return [handle_$t $value]
     }
@@ -127,24 +201,7 @@ proc create_parent {tree elem d} {
 }
 
 proc repr {d s} {
-  set str ""
-  if {[huddle type $d] == {dict}} {
-    set str "\{\n"
-    foreach key [huddle keys $d] {
-      set str "$str$s$key: [repr [huddle get $d $key] "$s  "]\n"
-    }
-    set str "$str$s\}\n"
-  } elseif {[huddle type $d] == {list}} {
-    set str "\[\n"
-    for {set i 0} {$i < [huddle llength $d]} {incr i} {
-      set str "$str$s[repr [huddle get $d $i] "$s  "],\n"
-    }
-    set str "$str$s\]\n"
-  } else {
-    set str "[huddle get_stripped $d]"
-  }
-
-  return $str
+  return [huddle jsondump $d]
 }
 
 proc create_list {table} {

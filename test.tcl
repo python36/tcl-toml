@@ -68,8 +68,8 @@ check_ok {
 check_ok {
   '#c\fa' = "b"
   'b\u0041c' = "bac"}
-# check_error {"jsh
-#   kjjas" = "n"}
+check_error {"jsh
+  kjjas" = "n"}
 # check_error {ue = "\u00 41"}
 check_ok {
   t = true
@@ -325,4 +325,36 @@ check_error {
   integers2 = [
     1, 2, 3,,
   ]
+}
+check_ok {
+  ld1 = 1979-05-27
+  lt1 = 07:32:00
+  lt2 = 00:32:00.999999
+}
+check_error {
+  ld1 = 1979-5-27
+}
+check_error {
+  ld1 = 1979-05-61
+}
+check_error {
+  ld1 = 1979-14-06
+}
+check_error {
+  ld1 = 13:59:90
+}
+check_ok {
+  ldt1 = 1979-05-27T07:32:00
+  ldt2 = 1979-05-27T00:32:00.999999
+  ldt11 = 1979-05-27 07:32:00
+  ldt22 = 1979-05-27 00:32:00.999999
+}
+check_ok {
+  odt1 = 1979-05-27T07:32:00Z
+  odt2 = 1979-05-27T00:32:00-07:00
+  odt3 = 1979-05-27T00:32:00.999999-07:00
+  odt4 = 1979-05-27 07:32:00Z
+}
+check_error {
+  odt1 = 1979-05-27T07:32:00-24:00
 }
