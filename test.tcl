@@ -358,3 +358,6 @@ check_ok {
 check_error {
   odt1 = 1979-05-27T07:32:00-24:00
 }
+check_ok {name = { first = "Tom", last = "Preston-Werner" }
+  point = { x = 1, y = 2 }
+  animal = { type.name = "pug" }}

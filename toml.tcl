@@ -33,6 +33,7 @@ proc timevalidate {format str} {
   # Declare the time string valid since all elements matched
   return 1
 }
+
 proc validate_date {s} {
   if {![timevalidate %Y-%m-%d $s]} {
     err BAD_DATE "Date not valid"
@@ -66,6 +67,9 @@ set float {^((\+|\-)?((0|[1-9](\_?[0-9]+)*)((\.[0-9](\_?[0-9]+)*)|(\.[0-9](\_?[0
 set start_array {^(\[)\s*}
 set finish_array {^(\])}
 set separate_array {^(,)}
+set start_inline_table {^(\{)[[:blank:]]*}
+set finish_inline_table {^(\})}
+set separate_inline_table {^[[:blank:]]*(,)[[:blank:]]*}
 set date {(\d{4}-\d{2}-\d{2})}
 set time {(\d{2}:\d{2}:\d{2})(?:\.(\d+))?}
 set offset [concat $date {[T|\ ]} $time {(Z|(\-|\+)\d\d:\d\d)}]
@@ -86,24 +90,34 @@ proc handle_str_multiline {s} {
     err PARSE_ERROR "Sequences of three or more quotes are not permitted"
   }
   return [huddle string [string range $s 3 end-3]]}
+
 proc handle_str_multiline_only_quotes {s} {
   return [huddle string [string range $s 3 end-3]]}
+
 proc handle_str {s} {
   return [huddle string [string range $s 1 end-1]]}
+
 proc handle_boolean {s} {
   return [huddle string $s]}
+
 proc handle_bin {s} {
   return [huddle string [expr [remove_underscore $s]]]}
+
 proc handle_oct {s} {
   return [huddle string [expr [remove_underscore $s]]]}
+
 proc handle_hex {s} {
   return [huddle string [expr [remove_underscore $s]]]}
+
 proc handle_nan {s} {
   return [huddle string [regsub {nan} $s {NaN}]]}
+
 proc handle_float {s} {
   return [huddle string [expr [remove_underscore $s]]]}
+
 proc handle_dec {s} {
   return [huddle string [expr [remove_underscore $s]]]}
+
 proc handle_start_array {s} {
   set arr [huddle list]
   pop first_clear
@@ -113,24 +127,56 @@ proc handle_start_array {s} {
     if {[pop finish_array] ne ""} {
       break
     } elseif {[pop separate_array] eq ""} {
-      err PARSE_ERROR "Undefined comma"
+      err PARSE_ERROR "Undefined separated comma"
     }
     pop first_clear
   }
-  return $arr
-}
+  return $arr}
+
+proc handle_start_inline_table {s} {
+  set d [huddle create]
+  while {true} {
+    if {[set raw_key [remove_blank_in_key [pop key]]] eq ""} {
+      err PARSE_ERROR "Undefined key"}
+    set keys [get_level $raw_key [list]]
+    set key [lindex $keys end]
+
+    if {[set equal [pop equal]] eq ""} {
+      err PARSE_ERROR "Undefined = or bad key"}
+
+    set value [find_value]
+
+    set path [lrange $keys 0 end-1]
+
+    if {[exists $d [concat $path $key]]} {
+      err OVERWRITE_ERROR {Already defined}
+    }
+
+    set d [append_item $path $key $value $d]
+
+    if {[pop finish_inline_table] ne ""]} {
+      break
+    } elseif {[pop separate_inline_table] eq ""]} {
+      err PARSE_ERROR "Undefined separated comma"
+    }
+  }
+  return $d}
+
 proc handle_local_date {s} {
   validate_date $s
   return [huddle string $s]}
+
 proc handle_local_time {s} {
   validate_time $s
   return [huddle string $s]}
+
 proc handle_local_datetime {s} {
   set d [string range $s 0 9]
   set t [string range $s 11 18]
   validate_date $d
   validate_time $t
   return [huddle string "${d}T[string range $s 11 end]"]}
+
 proc handle_offset_datetime {s} {
   regexp -expanded $::offset $s a d t f o
   validate_date $d
@@ -159,7 +205,7 @@ proc err {status reason} {
 
 proc find_value {} {
   foreach t {str_multiline_only_quotes str_multiline str boolean \
-      offset_datetime local_datetime local_date local_time bin oct hex nan float dec start_array} {
+      offset_datetime local_datetime local_date local_time bin oct hex nan float dec start_array start_inline_table} {
     if {[set value [pop $t]] ne ""} {
       return [handle_$t $value]
     }
@@ -238,6 +284,46 @@ proc get_path {d p} {
   return $path
 }
 
+proc open_table {table} {
+  set parents [get_level $table [list]]
+  if {[exists $::dictionary $parents]} {
+    err OVERWRITE_ERROR {Already defined}
+  }
+  set ::dictionary [create_parent $parents [huddle create] $::dictionary]
+  return $parents
+}
+
+proc open_array_of_table {array_of_table} {
+  set parents [get_level $array_of_table [list]]
+  if {[exists $::dictionary $parents]} {
+    if {[huddle type $::dictionary {*}[lrange [get_path $::dictionary $parents] 0 end-1]] != {list}} {
+      err INSERT_ERROR {Inserting into a non-list}
+    }
+    set arr [huddle get $::dictionary {*}[lrange [get_path $::dictionary $parents] 0 end-1]]
+    huddle append arr [huddle create]
+    huddle set ::dictionary {*}[lrange [get_path $::dictionary $parents] 0 end-1] $arr
+  } else {
+    set ::dictionary [create_parent $parents [huddle list [huddle create]] $::dictionary]
+  }
+  return $parents
+}
+
+proc append_item {path key value d} {
+  if {$path == {}} {
+    huddle append d $key $value
+  } else {
+    if {![exists $d $path]} {
+      set d [create_parent $path [huddle create] $d]
+    } elseif {[huddle type $d {*}[get_path $d $path]] != {dict}} {
+      err INSERT_ERROR {Inserting into a non-dict}
+    }
+    set parent_dict [huddle get $d {*}[get_path $d $path]]
+    huddle append parent_dict $key $value
+    huddle set d {*}[get_path $d $path] $parent_dict
+  }
+  return $d
+}
+
 proc decode {raw} {
   set ::history ""
   set parents {}
@@ -248,32 +334,17 @@ proc decode {raw} {
 
   pop first_clear
   set ::history ""
-  set is_table false
+  set is_array_of_table false
 
   while {$::raw ne ""} {
     if {[set table [remove_blank_in_key [pop table]]] ne ""} {
       puts "Table: $table"
-
-      set parents [get_level $table [list]]
-      if {[exists $::dictionary $parents]} {
-        err OVERWRITE_ERROR {Already defined}
-      }
-      set ::dictionary [create_parent $parents [huddle create] $::dictionary]
-      set is_table false
+      set parents [open_table $table]
+      set is_array_of_table false
     } elseif {[set array_of_table [remove_blank_in_key [pop array_of_table]]] ne ""} {
-      set parents [get_level $array_of_table [list]]
-      if {[exists $::dictionary $parents]} {
-        if {[huddle type $::dictionary {*}[lrange [get_path $::dictionary $parents] 0 end-1]] != {list}} {
-          err INSERT_ERROR {Inserting into a non-list}
-        }
-        set arr [huddle get $::dictionary {*}[lrange [get_path $::dictionary $parents] 0 end-1]]
-        huddle append arr [huddle create]
-        huddle set ::dictionary {*}[lrange [get_path $::dictionary $parents] 0 end-1] $arr
-      } else {
-        set ::dictionary [create_parent $parents [huddle list [huddle create]] $::dictionary]
-      }
-
-      set is_table true
+      puts "Array of table: $array_of_table"
+      set parents [open_array_of_table $array_of_table]
+      set is_array_of_table true
     } else {
       if {[set raw_key [remove_blank_in_key [pop key]]] eq ""} {
         err PARSE_ERROR "Undefined key"}
@@ -285,7 +356,7 @@ proc decode {raw} {
 
       set value [find_value]
 
-      if {$is_table == true} {
+      if {$is_array_of_table == true} {
         set cur_d [huddle get $::dictionary {*}[get_path $::dictionary $parents]]
         set path [lrange $keys 0 end-1]
       } else {
@@ -297,20 +368,9 @@ proc decode {raw} {
         err OVERWRITE_ERROR {Already defined}
       }
 
-      if {$path == {}} {
-        huddle append cur_d $key $value
-      } else {
-        if {![exists $cur_d $path]} {
-          set cur_d [create_parent $path [huddle create] $cur_d]
-        } elseif {[huddle type $cur_d {*}[get_path $cur_d $path]] != {dict}} {
-          err INSERT_ERROR {Inserting into a non-dict}
-        }
-        set parent_dict [huddle get $cur_d {*}[get_path $cur_d $path]]
-        huddle append parent_dict $key $value
-        huddle set cur_d {*}[get_path $cur_d $path] $parent_dict
-      }
+      set cur_d [append_item $path $key $value $cur_d]
 
-      if {$is_table == true} {
+      if {$is_array_of_table == true} {
         huddle set ::dictionary {*}[get_path $::dictionary $parents] $cur_d
       } else {
         set ::dictionary $cur_d
