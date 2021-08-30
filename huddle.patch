@@ -1,0 +1,21 @@
+
+
+@@ -487,6 +487,9 @@
+ 
+     set type [huddle type $huddle_object]
+ 
++    set node [unwrap $huddle_object]
++    foreach {tag src} $node break
++
+     switch -- $type {
+         boolean -
+         number {
+@@ -535,7 +538,7 @@
+             return "\{$nlof[join $inner ,$nlof]$newline$begin\}"
+         }
+         default {
+-            return [$types(callback:$type) jsondump $data $offset $newline $nextoff]
++            return [$types(callback:$tag) jsondump $huddle_object $offset $newline $nextoff]
+         }
+     }
+ }

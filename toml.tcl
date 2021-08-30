@@ -34,6 +34,120 @@ proc timevalidate {format str} {
   return 1
 }
 
+# modified https://github.com/tcltk/tcllib/blob/a23d722b1faf289d38a1fd22875c9a35c8484d90/modules/yaml/huddle_types.tcl#L4
+namespace eval ::huddle::types::protected_dict {
+  proc jsondump {huddle_object offset newline nextoff} {
+    puts "//$huddle_object\\\\"
+
+    set nlof "$newline$nextoff"
+    set sp " "
+    set begin ""
+
+    set inner {}
+    foreach {key} [huddle keys $huddle_object] {
+        lappend inner [subst {"$key":$sp[huddle jsondump [huddle get $huddle_object $key] $offset $newline $nextoff]}]
+    }
+    if {[llength $inner] == 1} {
+        return $inner
+    }
+    return "\{$nlof[join $inner ,$nlof]$newline$begin\}"
+  }
+}
+namespace eval ::huddle::types::protected_dict {
+    variable settings 
+    
+    # type definition
+    set settings {publicMethods {protected_dict keys protect} 
+                  tag P
+                  isContainer yes
+                  map {set Set}}
+
+
+    proc get_subnode {src key} { 
+      # get a sub-node specified by "key" from the tagged-content
+      return [dict get $src $key]
+    }
+    
+    # strip from the tagged-content
+    proc strip {src} {
+      foreach {key subnode} $src {
+        lappend result $key [strip_node $subnode]
+      }
+      return $result
+    }
+    
+    # set a sub-node from the tagged-content
+    proc Set {src_var key value} {
+      error {This is a protected type, you can only create}
+    }
+    
+    proc items {src} {
+      set result {}
+      dict for {key subnode} $src {
+        lappend result [list $key $subnode]
+      }
+      return $result
+    }
+    
+    
+    # remove a sub-node from the tagged-content
+    proc remove {src_var key} {
+      error {Protected type object}
+    }
+    
+
+    proc delete_subnode_but_not_key {src_var key} { 
+      error {Protected type object}
+    }
+    
+    # check equal for each node
+    proc equal {src1 src2} {
+      if {[llength $src1] != [llength $src2]} {return 0}
+      foreach {key1 subnode1} $src1 {
+        if {![dict exists $src2 $key1]} {return 0}
+        if {![are_equal_nodes $subnode1 [dict get $src2 $key1]]} {return 0}
+      }
+      return 1
+    }
+    
+    proc append_subnodes {tag src list} {
+      error {Protected type object}
+    }
+    
+    proc protect {arg} {
+      if {![huddle isHuddle $arg] || [huddle type $arg] ne {dict}} {
+        error {The arguments must be HUDDLE dictionary}
+      }
+      lset arg 1 0 P
+      return $arg
+    }
+
+    # $args: all arguments after "huddle protected_dict"
+    proc protected_dict {args} {
+        if {[llength $args] % 2} {error {wrong # args: should be "huddle create ?key value ...?"}}
+        set resultL [dict create]
+        
+        foreach {key value} $args {
+          if {[isHuddle $key]} {
+            foreach {tag src} [unwrap $key] break
+            if {$tag ne "string"} {error "The key '$key' must a string literal or huddle string" }
+            set key $src    
+          }
+          dict set resultL $key [argument_to_node $value]
+        }
+        return [wrap [list P $resultL]]
+    }
+    
+    proc keys {huddle_object} {
+      return [dict keys [get_src $huddle_object]]
+    }
+    
+    proc exists {src key} {
+      return [dict exists $src $key]
+    }
+}
+huddle addType ::huddle::types::protected_dict
+
 proc validate_date {s} {
   if {![timevalidate %Y-%m-%d $s]} {
     err BAD_DATE "Date not valid"
@@ -68,7 +182,7 @@ set start_array {^(\[)\s*}
 set finish_array {^(\])}
 set separate_array {^(,)}
 set start_inline_table {^(\{)[[:blank:]]*}
-set finish_inline_table {^(\})}
+set finish_inline_table {^[[:blank:]]*(\})}
 set separate_inline_table {^[[:blank:]]*(,)[[:blank:]]*}
 set date {(\d{4}-\d{2}-\d{2})}
 set time {(\d{2}:\d{2}:\d{2})(?:\.(\d+))?}
@@ -139,28 +253,25 @@ proc handle_start_inline_table {s} {
     if {[set raw_key [remove_blank_in_key [pop key]]] eq ""} {
       err PARSE_ERROR "Undefined key"}
     set keys [get_level $raw_key [list]]
-    set key [lindex $keys end]
 
-    if {[set equal [pop equal]] eq ""} {
+    if {[pop equal] eq ""} {
       err PARSE_ERROR "Undefined = or bad key"}
 
     set value [find_value]
 
-    set path [lrange $keys 0 end-1]
-
-    if {[exists $d [concat $path $key]]} {
+    if {[exists $d $keys]} {
       err OVERWRITE_ERROR {Already defined}
     }
 
-    set d [append_item $path $key $value $d]
+    set d [append_item $keys $value $d]
 
-    if {[pop finish_inline_table] ne ""]} {
+    if {[pop finish_inline_table] ne ""} {
       break
-    } elseif {[pop separate_inline_table] eq ""]} {
+    } elseif {[pop separate_inline_table] eq ""} {
       err PARSE_ERROR "Undefined separated comma"
     }
   }
-  return $d}
+  return [huddle protect $d]}
 
 proc handle_local_date {s} {
   validate_date $s
@@ -308,13 +419,19 @@ proc open_array_of_table {array_of_table} {
   return $parents
 }
 
-proc append_item {path key value d} {
+proc append_item {full_path value d} {
+  set key [lindex $full_path end]
+  set path [lrange $full_path 0 end-1]
+
   if {$path == {}} {
     huddle append d $key $value
   } else {
     if {![exists $d $path]} {
       set d [create_parent $path [huddle create] $d]
-    } elseif {[huddle type $d {*}[get_path $d $path]] != {dict}} {
+    } elseif {[set parent_type [huddle type $d {*}[get_path $d $path]]] != {dict}} {
+      if {$parent_type == {protected_dict}} {
+        err INSERT_ERROR {Inserting into a inline table not allowed}
+      }
       err INSERT_ERROR {Inserting into a non-dict}
     }
     set parent_dict [huddle get $d {*}[get_path $d $path]]
@@ -349,7 +466,6 @@ proc decode {raw} {
       if {[set raw_key [remove_blank_in_key [pop key]]] eq ""} {
         err PARSE_ERROR "Undefined key"}
       set keys [get_level $raw_key [list]]
-      set key [lindex $keys end]
 
       if {[set equal [pop equal]] eq ""} {
         err PARSE_ERROR "Undefined = or bad key"}
@@ -358,17 +474,17 @@ proc decode {raw} {
 
       if {$is_array_of_table == true} {
         set cur_d [huddle get $::dictionary {*}[get_path $::dictionary $parents]]
-        set path [lrange $keys 0 end-1]
+        set path $keys
       } else {
         set cur_d $::dictionary
-        set path [concat $parents [lrange $keys 0 end-1]]
+        set path [concat $parents $keys]
       }
 
-      if {[exists $cur_d [concat $path $key]]} {
+      if {[exists $cur_d $path]} {
         err OVERWRITE_ERROR {Already defined}
       }
 
-      set cur_d [append_item $path $key $value $cur_d]
+      set cur_d [append_item $path $value $cur_d]
 
       if {$is_array_of_table == true} {
         huddle set ::dictionary {*}[get_path $::dictionary $parents] $cur_d

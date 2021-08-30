@@ -361,3 +361,5 @@ check_error {
 check_ok {name = { first = "Tom", last = "Preston-Werner" }
   point = { x = 1, y = 2 }
   animal = { type.name = "pug" }}
+check_error {name = { first = "Tom", last = "Preston-Werner" }
+  name.a = 9}
