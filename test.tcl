@@ -363,3 +363,24 @@ check_ok {name = { first = "Tom", last = "Preston-Werner" }
   animal = { type.name = "pug" }}
 check_error {name = { first = "Tom", last = "Preston-Werner" }
   name.a = 9}
+check_ok {
+  sl = ''''''
+  sl2 = ''''''''''
+  sl3 = '''''\'''''
+  sl4 = '''\a'''
+  sl5 = '''''\a''\b'''''
+}
+check_error {
+  sl = '''''''''''
+}
+check_ok {a = """
+hello"""}
+check_ok {
+  b = "a\bc"
+}
+check_ok {
+  b."a\"" = 9
+}
+check_ok {
+  b.'a\"' = 9
+}

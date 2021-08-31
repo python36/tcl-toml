@@ -37,8 +37,6 @@ proc timevalidate {format str} {
 # modified https://github.com/tcltk/tcllib/blob/a23d722b1faf289d38a1fd22875c9a35c8484d90/modules/yaml/huddle_types.tcl#L4
 namespace eval ::huddle::types::protected_dict {
   proc jsondump {huddle_object offset newline nextoff} {
-    puts "//$huddle_object\\\\"
-
     set nlof "$newline$nextoff"
     set sp " "
     set begin ""
@@ -54,97 +52,94 @@ namespace eval ::huddle::types::protected_dict {
   }
 }
 namespace eval ::huddle::types::protected_dict {
-    variable settings 
-    
-    # type definition
-    set settings {publicMethods {protected_dict keys protect} 
-                  tag P
-                  isContainer yes
-                  map {set Set}}
+  variable settings 
+  
+  # type definition
+  set settings {publicMethods {protected_dict keys protect} 
+                tag P
+                isContainer yes
+                map {set Set}}
 
+  proc get_subnode {src key} { 
+    # get a sub-node specified by "key" from the tagged-content
+    return [dict get $src $key]
+  }
+  
+  # strip from the tagged-content
+  proc strip {src} {
+    foreach {key subnode} $src {
+      lappend result $key [strip_node $subnode]
+    }
+    return $result
+  }
+  
+  # set a sub-node from the tagged-content
+  proc Set {src_var key value} {
+    error {This is a protected type, you can only create}
+  }
+  
+  proc items {src} {
+    set result {}
+    dict for {key subnode} $src {
+      lappend result [list $key $subnode]
+    }
+    return $result
+  }
+  
+  # remove a sub-node from the tagged-content
+  proc remove {src_var key} {
+    error {Protected type object}
+  }
+  
+  proc delete_subnode_but_not_key {src_var key} { 
+    error {Protected type object}
+  }
+  
+  # check equal for each node
+  proc equal {src1 src2} {
+    if {[llength $src1] != [llength $src2]} {return 0}
+    foreach {key1 subnode1} $src1 {
+      if {![dict exists $src2 $key1]} {return 0}
+      if {![are_equal_nodes $subnode1 [dict get $src2 $key1]]} {return 0}
+    }
+    return 1
+  }
+  
+  proc append_subnodes {tag src list} {
+    error {Protected type object}
+  }
+  
+  proc protect {arg} {
+    if {![huddle isHuddle $arg] || [huddle type $arg] ne {dict}} {
+      error {The arguments must be HUDDLE dictionary}
+    }
+    lset arg 1 0 P
+    return $arg
+  }
 
-    proc get_subnode {src key} { 
-      # get a sub-node specified by "key" from the tagged-content
-      return [dict get $src $key]
-    }
-    
-    # strip from the tagged-content
-    proc strip {src} {
-      foreach {key subnode} $src {
-        lappend result $key [strip_node $subnode]
-      }
-      return $result
-    }
-    
-    # set a sub-node from the tagged-content
-    proc Set {src_var key value} {
-      error {This is a protected type, you can only create}
-    }
-    
-    proc items {src} {
-      set result {}
-      dict for {key subnode} $src {
-        lappend result [list $key $subnode]
-      }
-      return $result
-    }
-    
-    
-    # remove a sub-node from the tagged-content
-    proc remove {src_var key} {
-      error {Protected type object}
-    }
-    
-
-    proc delete_subnode_but_not_key {src_var key} { 
-      error {Protected type object}
-    }
-    
-    # check equal for each node
-    proc equal {src1 src2} {
-      if {[llength $src1] != [llength $src2]} {return 0}
-      foreach {key1 subnode1} $src1 {
-        if {![dict exists $src2 $key1]} {return 0}
-        if {![are_equal_nodes $subnode1 [dict get $src2 $key1]]} {return 0}
-      }
-      return 1
-    }
-    
-    proc append_subnodes {tag src list} {
-      error {Protected type object}
-    }
-    
-    proc protect {arg} {
-      if {![huddle isHuddle $arg] || [huddle type $arg] ne {dict}} {
-        error {The arguments must be HUDDLE dictionary}
-      }
-      lset arg 1 0 P
-      return $arg
-    }
-
-    # $args: all arguments after "huddle protected_dict"
-    proc protected_dict {args} {
-        if {[llength $args] % 2} {error {wrong # args: should be "huddle create ?key value ...?"}}
-        set resultL [dict create]
-        
-        foreach {key value} $args {
-          if {[isHuddle $key]} {
-            foreach {tag src} [unwrap $key] break
-            if {$tag ne "string"} {error "The key '$key' must a string literal or huddle string" }
-            set key $src    
-          }
-          dict set resultL $key [argument_to_node $value]
+  # $args: all arguments after "huddle protected_dict"
+  proc protected_dict {args} {
+      if {[llength $args] % 2} {error {wrong # args: should be "huddle create ?key value ...?"}}
+      set resultL [dict create]
+      
+      foreach {key value} $args {
+        if {[isHuddle $key]} {
+          foreach {tag src} [unwrap $key] break
+          if {$tag ne "string"} {error "The key '$key' must a string literal or huddle string" }
+          set key $src    
         }
-        return [wrap [list P $resultL]]
-    }
-    
-    proc keys {huddle_object} {
-      return [dict keys [get_src $huddle_object]]
-    }
-    
-    proc exists {src key} {
-      return [dict exists $src $key]
-    }
+        dict set resultL $key [argument_to_node $value]
+      }
+      return [wrap [list P $resultL]]
+  }
+  
+  proc keys {huddle_object} {
+    return [dict keys [get_src $huddle_object]]
+  }
+  
+  proc exists {src key} {
+    return [dict exists $src $key]
+  }
 }
 huddle addType ::huddle::types::protected_dict
 
@@ -161,8 +156,7 @@ proc validate_time {s} {
 
 set first_clear {^(\s*(\#[^\n]*)*)*}
 set clear {^(([[:blank:]]*(\#[^\n]*)*(\n|$)[[:blank:]]*)+|$)}
-set key_level {([A-Za-z0-9_-]+|\"([^\n\"]|\\\")*\"|\'([^\n\"]|\\\")*\')}
-set key_first_lvl [concat ^ $key_level]
+set key_level {([A-Za-z0-9_-]+|\"(?:[^\n\"]|\\\")*\"|\'(?:[^\n\"]|\\\")*\')}
 set keyt [concat {(} $key_level {([[:blank:]]*\.[[:blank:]]*} $key_level {)*)}]
 set key [concat ^ $keyt]
 set table [concat {^\[[[:blank:]]*} $keyt {[[:blank:]]*\]}]
@@ -171,6 +165,8 @@ set equal {^[[:blank:]]*(=)[[:blank:]]*}
 set str {^(\"([^\n\"]|\\\")*\")}
 set str_multiline_only_quotes {^(\"{6,10})}
 set str_multiline {^(\"{3}.*?[^\\]\"{3})(?=[^\"]|$)}
+set str_literal {^(\'([^\n\'])*\')}
+set str_literal_multiline {^(\'{3}.*?\'{3})(?=[^\']|$)}
 set boolean {^(true|false)}
 set bin {^(0b([0-1]+\_?)*[0-1])}
 set oct {^(0o([0-7]+\_?)*[0-7])}
@@ -195,20 +191,54 @@ set offset_datetime [concat {^(} $offset {)}]
 proc remove_underscore {s} {
   return [regsub -all {\_} $s {}]
 }
-proc remove_blank_in_key {s} {
-  return [regsub -all {[[:blank:]]*\.[[:blank:]]*} $s {.}]
+
+proc sub_escape_seq {s} {
+  set n $s
+  puts "&$s&"
+  foreach {s f} [lreverse [regexp -all -inline -indices {\\(\s+|u[0-9a-fA-F]{8}|u[0-9a-fA-F]{4}|[btnfr\"\\])} $s]] {
+    foreach {fa fb} $f {}
+    foreach {sa sb} $s {}
+    set lc [string range $n $sa $sb]
+    set c [string index $n $sa]
+    puts $c
+    if {$c == {u}} {
+      if {[expr $sb - $sa] == 8} {
+        set nc [join "\\U[string range $n [expr $sa + 1] $sb]" ""]
+      } else {
+        set nc [join "\\u[string range $n [expr $sa + 1] $sb]" ""]
+      }
+    } elseif {$c in {b t n f r \" \\}} {
+      set nc [join "\\$c" ""]
+    } else {
+      puts "**"
+      set nc ""
+    }
+    set n [string replace $n $fa $fb $nc]
+  }
+  return $n
 }
 
-proc handle_str_multiline {s} {
-  if {[regexp {([^\\]\"{6,}|\\\"{7,}|\"{10,})$} $s]} {
+proc handle_str_multiline {raw_s} {
+  if {[regexp {([^\\]\"{6,}|\\\"{7,}|\"{10,})$} $raw_s]} {
     err PARSE_ERROR "Sequences of three or more quotes are not permitted"
   }
-  return [huddle string [string range $s 3 end-3]]}
+  set s [sub_escape_seq $raw_s]
+  return [huddle string [regsub {^\n} [string range $s 3 end-3] {}]]}
 
-proc handle_str_multiline_only_quotes {s} {
-  return [huddle string [string range $s 3 end-3]]}
+proc handle_str_multiline_only_quotes {raw_s} {
+  return [huddle string [string range $raw_s 3 end-3]]}
 
-proc handle_str {s} {
+proc handle_str {raw_s} {
+  set s [sub_escape_seq $raw_s]
+  return [huddle string [string range $s 1 end-1]]}
+
+proc handle_str_literal_multiline {s} {
+  if {![regexp {^(\'{3,5}(.*[^\'])?\'{3,5})$} $s]} {
+    err PARSE_ERROR "Sequences of three or more quotes are not permitted"
+  }
+  return [huddle string [regsub {^\n} [string range $s 3 end-3] {}]]}
+
+proc handle_str_literal {s} {
   return [huddle string [string range $s 1 end-1]]}
 
 proc handle_boolean {s} {
@@ -250,9 +280,9 @@ proc handle_start_array {s} {
 proc handle_start_inline_table {s} {
   set d [huddle create]
   while {true} {
-    if {[set raw_key [remove_blank_in_key [pop key]]] eq ""} {
+    if {[set raw_key [pop key]] eq ""} {
       err PARSE_ERROR "Undefined key"}
-    set keys [get_level $raw_key [list]]
+    set keys [get_keys $raw_key]
 
     if {[pop equal] eq ""} {
       err PARSE_ERROR "Undefined = or bad key"}
@@ -315,7 +345,7 @@ proc err {status reason} {
 }
 
 proc find_value {} {
-  foreach t {str_multiline_only_quotes str_multiline str boolean \
+  foreach t {str_multiline_only_quotes str_multiline str str_literal_multiline str_literal boolean \
       offset_datetime local_datetime local_date local_time bin oct hex nan float dec start_array start_inline_table} {
     if {[set value [pop $t]] ne ""} {
       return [handle_$t $value]
@@ -324,11 +354,18 @@ proc find_value {} {
   err PARSE_ERROR {Undefined value}
 }
 
-proc get_level {path l} {
-  if {![regexp -expanded [concat $::key_first_lvl {(\.|$)}] $path r lvl]} {
-    return $l}
-  lappend l $lvl
-  return [get_level [string range $path [string length $r] end] $l]
+proc get_keys {path} {
+  set l [list]
+  foreach {i key} [regexp -expanded -all -inline [concat {[[:blank:]]*} $::key_level {[[:blank:]]*(?:\.|$)}] "$path"] {
+    if {[string index $key 0] eq {"}} {
+      lappend l [sub_escape_seq [string range $key 1 end-1]]
+    } elseif {[string index $key 0] eq {'}} {
+      lappend l [string range $key 1 end-1]
+    } else {
+      lappend l $key
+    }
+  }
+  return $l
 }
 
 proc create_parent {tree elem d} {
@@ -396,7 +433,7 @@ proc get_path {d p} {
 }
 
 proc open_table {table} {
-  set parents [get_level $table [list]]
+  set parents [get_keys $table]
   if {[exists $::dictionary $parents]} {
     err OVERWRITE_ERROR {Already defined}
   }
@@ -405,7 +442,7 @@ proc open_table {table} {
 }
 
 proc open_array_of_table {array_of_table} {
-  set parents [get_level $array_of_table [list]]
+  set parents [get_keys $array_of_table]
   if {[exists $::dictionary $parents]} {
     if {[huddle type $::dictionary {*}[lrange [get_path $::dictionary $parents] 0 end-1]] != {list}} {
       err INSERT_ERROR {Inserting into a non-list}
@@ -454,18 +491,18 @@ proc decode {raw} {
   set is_array_of_table false
 
   while {$::raw ne ""} {
-    if {[set table [remove_blank_in_key [pop table]]] ne ""} {
+    if {[set table [pop table]] ne ""} {
       puts "Table: $table"
       set parents [open_table $table]
       set is_array_of_table false
-    } elseif {[set array_of_table [remove_blank_in_key [pop array_of_table]]] ne ""} {
+    } elseif {[set array_of_table [pop array_of_table]] ne ""} {
       puts "Array of table: $array_of_table"
       set parents [open_array_of_table $array_of_table]
       set is_array_of_table true
     } else {
-      if {[set raw_key [remove_blank_in_key [pop key]]] eq ""} {
+      if {[set raw_key [pop key]] eq ""} {
         err PARSE_ERROR "Undefined key"}
-      set keys [get_level $raw_key [list]]
+      set keys [get_keys $raw_key]
 
       if {[set equal [pop equal]] eq ""} {
         err PARSE_ERROR "Undefined = or bad key"}
