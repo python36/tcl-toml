@@ -18,14 +18,16 @@ proc check_error {t} {
     puts "[puts_ok] ERROR $e"
   } else {
     puts "[puts_error] ERROR: $t"
+    exit 1
   }
 }
 
 proc check_ok {t} {
-  if {[catch {decode $t} r]} {
+  if {[catch {set res [decode $t]} r]} {
     puts "[puts_error] VALID: $t\nReason: $r"
+    exit 1
   } else {
-    puts "[puts_ok] VALID: $t"
+    puts "[puts_ok] VALID: $t\n---\n[huddle jsondump $res]"
   }
 }
 
@@ -43,16 +45,16 @@ check_ok {\
   bare-key="value"
   1234 = "value"}
 check_error {k$y = "value"}
-# check_ok {\
-#   b = "ab\bc"
-#   t = "ab\tc"
-#   n = "ab\nc"
-#   f = "ab\fc"
-#   r = "ab\rc"
-#   quote = "ab\"c"
-#   backslash = "ab\\c"
-#   u16 = "\u0041"
-#   u32 = "\u00000041"}
+check_ok {\
+  b = "ab\bc"
+  t = "ab\tc"
+  n = "ab\nc"
+  f = "ab\fc"
+  r = "ab\rc"
+  quote = "ab\"c"
+  backslash = "ab\\c"
+  u16 = "\u0041"
+  u32 = "\u00000041"}
 check_ok {m = """hel"lo
  wor""
 
@@ -191,24 +193,20 @@ check_error {
 check_error {
   [a.b"]
   b = 3}
-
 check_ok {
   [ a . b . c ]
   b.v = 3}
 check_error {
   a.b = 3
-  a.b.c = 4
-}
+  a.b.c = 4}
 check_ok {
   a.b.c.g.h = 3
-  a.b.f = 4
-}
+  a.b.f = 4}
 check_ok {
   [[   at   ]]
   a = 1
   [[at]]
-  a = 2
-}
+  a = 2}
 check_error {[[      ]]}
 check_error {[   ]}
 check_error {[]}
@@ -217,89 +215,85 @@ check_ok {
   [[a.b.c]]
   a = 1
   [[at]]
-  a = 2
-}
+  a = 2}
 check_ok {
   [[a.b.c]]
   a = 1
   b = 3
   [[a.b.c]]
-  a = 2
-}
+  a = 2}
 check_ok {
   [[a.b]]
   a = 1
   cc = 3
   [[a.b.c]]
-  a = 2
-}
+  a = 2}
 check_ok {[[fruits]]
-name = "apple"
+  name = "apple"
 
-[fruits.physical]  # subtable
-color = "red"
-shape = "round"
+  [fruits.physical]  # subtable
+  color = "red"
+  shape = "round"
 
-[[fruits.varieties]]  # nested array of tables
-name = "red delicious"
+  [[fruits.varieties]]  # nested array of tables
+  name = "red delicious"
 
-[[fruits.varieties]]
-name = "granny smith"
+  [[fruits.varieties]]
+  name = "granny smith"
 
 
-[[fruits]]
-name = "banana"
+  [[fruits]]
+  name = "banana"
 
-[[fruits.varieties]]
-name = "plantain"}
+  [[fruits.varieties]]
+  name = "plantain"}
 
 check_ok {[[products]]
-name = "Hammer"
-sku = 738594937
+  name = "Hammer"
+  sku = 738594937
 
-[[products]]  # empty table within the array
+  [[products]]  # empty table within the array
 
-[[products]]
-name = "Nail"
-sku = 284758393
+  [[products]]
+  name = "Nail"
+  sku = 284758393
 
-color = "gray"}
+  color = "gray"}
 
-check_error {[fruit.physical]  # subtable, but to which parent element should it belong?
-color = "red"
-shape = "round"
+  check_error {[fruit.physical]  # subtable, but to which parent element should it belong?
+  color = "red"
+  shape = "round"
 
-[[fruit]]  # parser must throw an error upon discovering that "fruit" is
-           # an array rather than a table
-name = "apple"}
+  [[fruit]]  # parser must throw an error upon discovering that "fruit" is
+             # an array rather than a table
+  name = "apple"}
 
-check_error {[[fruits]]
-name = "apple"
+  check_error {[[fruits]]
+  name = "apple"
 
-[[fruits.varieties]]
-name = "red delicious"
+  [[fruits.varieties]]
+  name = "red delicious"
 
-# INVALID: This table conflicts with the previous array of tables
-[fruits.varieties]
-name = "granny smith"}
+  # INVALID: This table conflicts with the previous array of tables
+  [fruits.varieties]
+  name = "granny smith"}
 
-check_error {[[fruits]]
-name = "apple"
+  check_error {[[fruits]]
+  name = "apple"
 
-[fruits.physical]
-color = "red"
-shape = "round"
+  [fruits.physical]
+  color = "red"
+  shape = "round"
 
-# INVALID: This array of tables conflicts with the previous table
-[[fruits.physical]]
-color = "green"}
+  # INVALID: This array of tables conflicts with the previous table
+  [[fruits.physical]]
+  color = "green"}
 
 check_ok {
   integers = [ 1, 2, 3 ]
   colors = [ "red", "yellow", "green" ]
   nested_arrays_of_ints = [ [ 1, 2 ], [3, 4, 5] ]
-  nested_mixed_array = [ [ 1, 2 ], ["a", "b", "c"] ]
-}
+  nested_mixed_array = [ [ 1, 2 ], ["a", "b", "c"] ]}
 
 check_ok {
   integers2 = [
@@ -319,68 +313,44 @@ check_ok {
   [5,#second comment
     6]
   ,3]
-  array_empty = []
-}
-check_error {
-  integers2 = [
+  array_empty = []}
+check_error { integers2 = [
     1, 2, 3,,
-  ]
-}
+  ]}
 check_ok {
   ld1 = 1979-05-27
   lt1 = 07:32:00
   lt2 = 00:32:00.999999
 }
-check_error {
-  ld1 = 1979-5-27
-}
-check_error {
-  ld1 = 1979-05-61
-}
-check_error {
-  ld1 = 1979-14-06
-}
-check_error {
-  ld1 = 13:59:90
-}
-check_ok {
-  ldt1 = 1979-05-27T07:32:00
+check_error {ld1 = 1979-5-27}
+check_error {ld1 = 1979-05-61}
+check_error {ld1 = 1979-14-06}
+check_error {ld1 = 13:59:90}
+check_ok {ldt1 = 1979-05-27T07:32:00
   ldt2 = 1979-05-27T00:32:00.999999
   ldt11 = 1979-05-27 07:32:00
-  ldt22 = 1979-05-27 00:32:00.999999
-}
-check_ok {
-  odt1 = 1979-05-27T07:32:00Z
+  ldt22 = 1979-05-27 00:32:00.999999}
+check_ok {odt1 = 1979-05-27T07:32:00Z
   odt2 = 1979-05-27T00:32:00-07:00
   odt3 = 1979-05-27T00:32:00.999999-07:00
-  odt4 = 1979-05-27 07:32:00Z
-}
-check_error {
-  odt1 = 1979-05-27T07:32:00-24:00
-}
+  odt4 = 1979-05-27 07:32:00Z}
+check_error {odt1 = 1979-05-27T07:32:00-24:00}
 check_ok {name = { first = "Tom", last = "Preston-Werner" }
   point = { x = 1, y = 2 }
   animal = { type.name = "pug" }}
 check_error {name = { first = "Tom", last = "Preston-Werner" }
   name.a = 9}
-check_ok {
-  sl = ''''''
+check_ok {sl = ''''''
   sl2 = ''''''''''
   sl3 = '''''\'''''
   sl4 = '''\a'''
-  sl5 = '''''\a''\b'''''
-}
-check_error {
-  sl = '''''''''''
-}
+  sl5 = '''''\a''\b'''''}
+check_error {sl = '''''''''''}
 check_ok {a = """
 hello"""}
 check_ok {
-  b = "a\bc"
-}
-check_ok {
-  b."a\"" = 9
-}
-check_ok {
-  b.'a\"' = 9
-}
+  b = "a\bc"}
+check_ok {b."a\"" = 9}
+check_ok {b.'a\"' = 9}
+
+puts "\nOK! $valid successful tests"

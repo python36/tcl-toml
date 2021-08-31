@@ -36,22 +36,6 @@ proc timevalidate {format str} {
 
 # modified https://github.com/tcltk/tcllib/blob/a23d722b1faf289d38a1fd22875c9a35c8484d90/modules/yaml/huddle_types.tcl#L4
 namespace eval ::huddle::types::protected_dict {
-  proc jsondump {huddle_object offset newline nextoff} {
-    set nlof "$newline$nextoff"
-    set sp " "
-    set begin ""
-
-    set inner {}
-    foreach {key} [huddle keys $huddle_object] {
-        lappend inner [subst {"$key":$sp[huddle jsondump [huddle get $huddle_object $key] $offset $newline $nextoff]}]
-    }
-    if {[llength $inner] == 1} {
-        return $inner
-    }
-    return "\{$nlof[join $inner ,$nlof]$newline$begin\}"
-  }
-}
-namespace eval ::huddle::types::protected_dict {
   variable settings 
   
   # type definition
@@ -140,8 +124,117 @@ namespace eval ::huddle::types::protected_dict {
   proc exists {src key} {
     return [dict exists $src $key]
   }
+
+  proc jsondump {huddle_object offset newline nextoff} {
+    set nlof "$newline$nextoff"
+    set sp " "
+    set begin ""
+
+    set inner {}
+    foreach {key} [huddle keys $huddle_object] {
+        lappend inner [subst {"$key":$sp[huddle jsondump [huddle get $huddle_object $key] $offset $newline $nextoff]}]
+    }
+    if {[llength $inner] == 1} {
+        return $inner
+    }
+    return "\{$nlof[join $inner ,$nlof]$newline$begin\}"
+  }
+
 }
+
+namespace eval ::huddle::types::inf {
+  variable settings 
+  
+  # type definition
+  set settings {publicMethods {inf -inf}
+                tag inf
+                isContainer no }
+        
+  proc -inf {} {
+    return [wrap [list inf -Inf]]
+  }
+
+  proc inf {} {
+    return [wrap [list inf Inf]]
+  }
+  
+  proc equal {i1 i2} {
+    return expr $i1 == $i2
+  }
+
+  proc jsondump {huddle_object offset newline nextoff} {
+    error "Out of range float values are not JSON compliant"
+  }
+}
+
+namespace eval ::huddle::types::nan {
+  variable settings 
+  
+  # type definition
+  set settings {publicMethods {nan}
+                tag nan
+                isContainer no }
+        
+  proc nan {} {
+    return [wrap [list nan]]
+  }
+  
+  proc equal {n1 n2} {
+    return 1
+  }
+
+  proc jsondump {huddle_object offset newline nextoff} {
+    error "Out of range float values are not JSON compliant"
+  }
+}
+
+namespace eval ::huddle::types::offset_datetime {
+  variable settings 
+  
+  # type definition
+  set settings {publicMethods {offset_datetime}
+                tag odt
+                isContainer no }
+        
+  proc offset_datetime {arg} {
+    return [wrap [list odt $arg]]
+  }
+  
+  proc equal {odt1 odt2} {
+    return [string equal $odt1 $odt2]
+  }
+
+  proc jsondump {huddle_object offset newline nextoff} {
+    return [lindex $huddle_object 1 1]
+  }
+}
+
+namespace eval ::huddle::types::datetime {
+  variable settings 
+  
+  # type definition
+  set settings {publicMethods {datetime}
+                tag dt
+                isContainer no }
+        
+  proc datetime {arg} {
+    return [wrap [list dt $arg]]
+  }
+  
+  proc equal {dt1 dt2} {
+    return [string equal $dt1 $dt2]
+  }
+
+  proc jsondump {huddle_object offset newline nextoff} {
+    return [lindex $huddle_object 1 1]
+  }
+}
+
 huddle addType ::huddle::types::protected_dict
+huddle addType ::huddle::types::inf
+huddle addType ::huddle::types::nan
+huddle addType ::huddle::types::offset_datetime
+huddle addType ::huddle::types::datetime
 
 proc validate_date {s} {
   if {![timevalidate %Y-%m-%d $s]} {
@@ -156,7 +249,7 @@ proc validate_time {s} {
 
 set first_clear {^(\s*(\#[^\n]*)*)*}
 set clear {^(([[:blank:]]*(\#[^\n]*)*(\n|$)[[:blank:]]*)+|$)}
-set key_level {([A-Za-z0-9_-]+|\"(?:[^\n\"]|\\\")*\"|\'(?:[^\n\"]|\\\")*\')}
+set key_level {([A-Za-z0-9_-]+|\"(?:[^\n\"]|\\\")*\"|\'(?:[^\n\']|\\\')*\')}
 set keyt [concat {(} $key_level {([[:blank:]]*\.[[:blank:]]*} $key_level {)*)}]
 set key [concat ^ $keyt]
 set table [concat {^\[[[:blank:]]*} $keyt {[[:blank:]]*\]}]
@@ -173,7 +266,8 @@ set oct {^(0o([0-7]+\_?)*[0-7])}
 set hex {^(0x([0-9a-fA-F]+\_?)*[0-9a-fA-F])}
 set dec {^((\+|\-)?(0|[1-9](\_?[0-9]+)*))}
 set nan {^((\+|\-)?nan)}
-set float {^((\+|\-)?((0|[1-9](\_?[0-9]+)*)((\.[0-9](\_?[0-9]+)*)|(\.[0-9](\_?[0-9]+)*)?(e|E)(\+|\-)?[0-9](\_?[0-9]+)*)|inf))}
+set inf {^((\+|\-)?inf)}
+set float {^((\+|\-)?((0|[1-9](\_?[0-9]+)*)((\.[0-9](\_?[0-9]+)*)|(\.[0-9](\_?[0-9]+)*)?(e|E)(\+|\-)?[0-9](\_?[0-9]+)*)))}
 set start_array {^(\[)\s*}
 set finish_array {^(\])}
 set separate_array {^(,)}
@@ -194,13 +288,11 @@ proc remove_underscore {s} {
 
 proc sub_escape_seq {s} {
   set n $s
-  puts "&$s&"
   foreach {s f} [lreverse [regexp -all -inline -indices {\\(\s+|u[0-9a-fA-F]{8}|u[0-9a-fA-F]{4}|[btnfr\"\\])} $s]] {
     foreach {fa fb} $f {}
     foreach {sa sb} $s {}
     set lc [string range $n $sa $sb]
     set c [string index $n $sa]
-    puts $c
     if {$c == {u}} {
       if {[expr $sb - $sa] == 8} {
         set nc [join "\\U[string range $n [expr $sa + 1] $sb]" ""]
@@ -210,7 +302,6 @@ proc sub_escape_seq {s} {
     } elseif {$c in {b t n f r \" \\}} {
       set nc [join "\\$c" ""]
     } else {
-      puts "**"
       set nc ""
     }
     set n [string replace $n $fa $fb $nc]
@@ -242,25 +333,31 @@ proc handle_str_literal {s} {
   return [huddle string [string range $s 1 end-1]]}
 
 proc handle_boolean {s} {
-  return [huddle string $s]}
+  return [huddle boolean $s]}
 
 proc handle_bin {s} {
-  return [huddle string [expr [remove_underscore $s]]]}
+  return [huddle number [expr [remove_underscore $s]]]}
 
 proc handle_oct {s} {
-  return [huddle string [expr [remove_underscore $s]]]}
+  return [huddle number [expr [remove_underscore $s]]]}
 
 proc handle_hex {s} {
-  return [huddle string [expr [remove_underscore $s]]]}
+  return [huddle number [expr [remove_underscore $s]]]}
 
 proc handle_nan {s} {
-  return [huddle string [regsub {nan} $s {NaN}]]}
+  return [huddle nan]}
+
+proc handle_inf {s} {
+  if {[string index $s 0] eq {-}} {
+    return [huddle -inf]
+  }
+  return [huddle inf]}
 
 proc handle_float {s} {
-  return [huddle string [expr [remove_underscore $s]]]}
+  return [huddle number [expr [remove_underscore $s]]]}
 
 proc handle_dec {s} {
-  return [huddle string [expr [remove_underscore $s]]]}
+  return [huddle number [expr [remove_underscore $s]]]}
 
 proc handle_start_array {s} {
   set arr [huddle list]
@@ -305,18 +402,18 @@ proc handle_start_inline_table {s} {
 
 proc handle_local_date {s} {
   validate_date $s
-  return [huddle string $s]}
+  return [huddle datetime $s]}
 
 proc handle_local_time {s} {
   validate_time $s
-  return [huddle string $s]}
+  return [huddle datetime $s]}
 
 proc handle_local_datetime {s} {
   set d [string range $s 0 9]
   set t [string range $s 11 18]
   validate_date $d
   validate_time $t
-  return [huddle string "${d}T[string range $s 11 end]"]}
+  return [huddle datetime "${d}T[string range $s 11 end]"]}
 
 proc handle_offset_datetime {s} {
   regexp -expanded $::offset $s a d t f o
@@ -327,7 +424,7 @@ proc handle_offset_datetime {s} {
       err BAD_OFFSET "Offset not valid"
     }
   }
-  return [huddle string "${d}T[string range $s 11 end]"]}
+  return [huddle offset_datetime "${d}T[string range $s 11 end]"]}
 
 proc pop {t} {
   set exp [set ::$t]
@@ -346,7 +443,7 @@ proc err {status reason} {
 
 proc find_value {} {
   foreach t {str_multiline_only_quotes str_multiline str str_literal_multiline str_literal boolean \
-      offset_datetime local_datetime local_date local_time bin oct hex nan float dec start_array start_inline_table} {
+      offset_datetime local_datetime local_date local_time bin oct hex nan inf float dec start_array start_inline_table} {
     if {[set value [pop $t]] ne ""} {
       return [handle_$t $value]
     }
@@ -492,11 +589,9 @@ proc decode {raw} {
 
   while {$::raw ne ""} {
     if {[set table [pop table]] ne ""} {
-      puts "Table: $table"
       set parents [open_table $table]
       set is_array_of_table false
     } elseif {[set array_of_table [pop array_of_table]] ne ""} {
-      puts "Array of table: $array_of_table"
       set parents [open_array_of_table $array_of_table]
       set is_array_of_table true
     } else {
@@ -537,5 +632,5 @@ proc decode {raw} {
     set ::history ""
   }
 
-  puts [repr $::dictionary ""]
+  return $::dictionary
 }
