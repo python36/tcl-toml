@@ -1,0 +1,41 @@
+First  Trouble
+
+tomli error
+but pytomlpp ok
+
+
+[a.b.c.d]
+u = 6
+[a]
+b.t = 8
+[a.b]
+u = 0
+
+
+but this bug
+
+
+
+[a]
+b.t = 8
+[a.b]
+u = 0
+
+
+
+
+
+
+Second Trouble
+
+ [a.b.c]
+  z = 9
+  [a]
+  b.c.t = 9
+
+
+[a.b.c.d]
+  z = 9
+  [a]
+  b.c.d.k.t = 8
+

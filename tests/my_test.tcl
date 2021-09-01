@@ -121,7 +121,7 @@ check_error {invalid_float_3 = 3.e+20}
 check_error {invalid_float_3 = 3e+2__0}
 check_error {invalid_float_3 = 3e+_2_0}
 check_error {invalid_float_3 = 3e_2_0}
-check_ok {
+decode {
   # infinity
   sf1 = inf  # positive infinity
   sf2 = +inf # positive infinity
@@ -352,5 +352,81 @@ check_ok {
   b = "a\bc"}
 check_ok {b."a\"" = 9}
 check_ok {b.'a\"' = 9}
+check_ok {b.c = {}}
+check_ok {
+  [a.b.c.d]
+  u = 6
+  [a]
+  n = 9}
+check_ok {
+  [a]
+  n = 9
+  [a.b.c.d]
+  u = 6}
+check_ok {
+  [a]
+  b.t = 8
+  [a.b.c.d]
+  z = 9}
+check_ok {
+  a.b.e = 8
+  [a.b.c.d]
+  z = 9}
+check_error {
+  [a]
+  b.c = 8
+  [a.b.c.d]
+  z = 9}
+check_error {
+  a.b.c = 8
+  [a.b.c.d]
+  z = 9}
+check_ok {
+  [a.b.c]
+  z = 9
+  [a]
+  b.c.d = 9}
+check_error {
+  [a.b.c]
+  z = 9
+  [a]
+  b.c = 9}
+check_ok {
+  [a.b.c.d]
+  z = 9
+  [a.b.c.d.k]
+  t = 8}
+check_ok {[a.b.c.d]
+  z = 9
+  [a]
+  b.c.d.k.t = 8}
+check_ok {
+  a.b.c = 8
+  [a.b.t]
+  d = 9}
+check_error {
+  a.b.c = 8
+  [a.b]
+  d = 9}
+check_ok {[a.b.c.d]
+  u = 6
+  [a]
+  b.t = 8
+  [a.b.u]
+  u = 0}
+check_error {[a.b.c.d.k]
+  u = 6
+  [a]
+  b = 8}
+check_error {[a]
+  b.q = 3
+  [a.b]
+  u = 7}
+check_error {[a.b.c.d]
+  u = 6
+  [a]
+  b.c.t = 8
+  [a.b]
+  u = 0}
 
 puts "\nOK! $valid successful tests"

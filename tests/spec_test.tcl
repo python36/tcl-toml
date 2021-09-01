@@ -241,13 +241,143 @@ check_ok {# [x] you
   [x.y.z.w] # for this to work
 
   [x] # defining a super-table afterward is ok}
-check_ok {}
-check_ok {}
-check_ok {}
-check_ok {}
-check_ok {}
+check_error {# DO NOT DO THIS
+
+  [fruit]
+  apple = "red"
+
+  [fruit]
+  orange = "orange"}
+check_error {# DO NOT DO THIS EITHER
+
+  [fruit]
+  apple = "red"
+
+  [fruit.apple]
+  texture = "smooth"}
+check_ok {# VALID BUT DISCOURAGED
+  [fruit.apple]
+  [animal]
+  [fruit.orange]}
+check_ok {# RECOMMENDED
+  [fruit.apple]
+  [fruit.orange]
+  [animal]}
+check_ok {# Top-level table begins.
+  name = "Fido"
+  breed = "pug"
+
+  # Top-level table ends.
+  [owner]
+  name = "Regina Dogman"
+  member_since = 1999-08-04}
+check_ok {fruit.apple.color = "red"
+  # Defines a table named fruit
+  # Defines a table named fruit.apple
+
+  fruit.apple.taste.sweet = true
+  # Defines a table named fruit.apple.taste
+  # fruit and fruit.apple were already created}
+check_error {[fruit]
+  apple.color = "red"
+  apple.taste.sweet = true
+
+  [fruit.apple]  # INVALID}
+check_error {[fruit]
+  apple.color = "red"
+  apple.taste.sweet = true
+
+  [fruit.apple.taste]  # INVALID}
+check_ok {[fruit]
+  apple.color = "red"
+  apple.taste.sweet = true
+  [fruit.apple.texture]  # you can add sub-tables
+  smooth = true}
+check_ok {name = { first = "Tom", last = "Preston-Werner" }
+  point = { x = 1, y = 2 }
+  animal = { type.name = "pug" }}
+check_ok {[name]
+  first = "Tom"
+  last = "Preston-Werner"
+
+  [point]
+  x = 1
+  y = 2
+
+  [animal]
+  type.name = "pug"}
+check_error {[product]
+  type = { name = "Nail" }
+  type.edible = false  # INVALID}
+check_error {[product]
+  type.name = "Nail"
+  type = { edible = false }  # INVALID}
+decode {[[products]]
+  name = "Hammer"
+  sku = 738594937
+
+  [[products]]  # empty table within the array
+
+  [[products]]
+  name = "Nail"
+  sku = 284758393
+
+  color = "gray"}
+check_ok {[[fruits]]
+  name = "apple"
+
+  [fruits.physical]  # subtable
+  color = "red"
+  shape = "round"
+
+  [[fruits.varieties]]  # nested array of tables
+  name = "red delicious"
+
+  [[fruits.varieties]]
+  name = "granny smith"
 
 
+  [[fruits]]
+  name = "banana"
 
-check_error {}
+  [[fruits.varieties]]
+  name = "plantain"}
+check_error {# INVALID TOML DOC
+  [fruit.physical]  # subtable, but to which parent element should it belong?
+  color = "red"
+  shape = "round"
+
+  [[fruit]]  # parser must throw an error upon discovering that "fruit" is
+             # an array rather than a table
+  name = "apple"}
+check_error {# INVALID TOML DOC
+  fruits = []
+
+  [[fruits]] # Not allowed}
+check_error {# INVALID TOML DOC
+  [[fruits]]
+  name = "apple"
+
+  [[fruits.varieties]]
+  name = "red delicious"
+
+  # INVALID: This table conflicts with the previous array of tables
+  [fruits.varieties]
+  name = "granny smith"}
+check_error {# INVALID TOML DOC
+  [[fruits]]
+  name = "apple"
+
+  [fruits.physical]
+  color = "red"
+  shape = "round"
+
+  # INVALID: This array of tables conflicts with the previous table
+  [[fruits.physical]]
+  color = "green"}
+check_ok {
+  points = [ { x = 1, y = 2, z = 3 },
+             { x = 7, y = 8, z = 9 },
+             { x = 2, y = 4, z = 8 } ]}
+
 puts "\nOK! $valid successful tests"
