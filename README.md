@@ -6,9 +6,12 @@ A TCL package for parsing and creating TOML
 + tcllib 1.20
 
 # Install
-`> echo "package require huddle; puts [package ifneeded huddle 0.3]" | tclsh
+```sh
+> echo "package require huddle; puts [package ifneeded huddle 0.3]" | tclsh
 source YOUR_PATH
-patch YOUR_PATH huddle.patch`
+
+> patch YOUR_PATH huddle.patch
+```
 
 # Example
 ```tcl
